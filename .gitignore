@@ -1,0 +1,9 @@
+.ccls-cache
+*.o
+*.S
+*.s
+*.bin
+*.elf
+*.img
+*.map
+kernel/system
