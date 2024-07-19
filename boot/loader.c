@@ -5,6 +5,22 @@
 
 #define SERIAL_PORT SERIAL_DEFAULT_SERIAL_PORT
 
+#include <x86/printf.h>
+
+static int printf(const char *fmt, ...) {
+  char printf_buf[32];
+  va_list args;
+  int printed;
+
+  va_start(args, fmt);
+  printed = x86_print_vsprintf(printf_buf, fmt, args);
+  va_end(args);
+
+  serial_puts(SERIAL_DEFAULT_SERIAL_PORT, printf_buf);
+
+  return printed;
+}
+
 extern void pm_start();
 
 struct disk_address_packet dap __attribute__((aligned(0x10))) = {
@@ -33,15 +49,15 @@ static void __attribute__((noinline)) cp(unsigned long dst, unsigned long src,
                :);
 }
 
-u64_t gdt[3] __attribute__((aligned(0x10))) = {
+uint64_t gdt[3] __attribute__((aligned(0x10))) = {
     [0] = 0,                  // reserved
     [1] = 0x00CF9A0000000000, // 32bit executable zero based no limit 4k page
     [2] = 0x00CF920000000000,
 };
 
 typedef struct {
-  u16_t length;
-  u32_t addr;
+  uint16_t length;
+  uint32_t addr;
 } __attribute__((packed)) gdt_ptr_t;
 
 gdt_ptr_t gdt_ptr __attribute__((aligned(0x10))) = {
@@ -55,7 +71,7 @@ static char cp_buf[SECS_PER_READ * SEC_SIZE];
 // __entry 配合 linker script
 // 强制把_start 里面的代码放到程序开头
 void __attribute__((section("entry"))) _start() {
-  gdt_ptr.addr = (u32_t)&gdt;
+  gdt_ptr.addr = (uint32_t)&gdt;
   asm volatile("cli");
   unsigned i, code = 0;
 
@@ -72,17 +88,17 @@ void __attribute__((section("entry"))) _start() {
        SECS_PER_READ * SEC_SIZE);
 
     if (code < 0) {
-      serial_puts(SERIAL_PORT, "read sectors by bios call failed\n");
+      printf("read sectors by bios call failed\n");
       while (1)
         ;
     }
   }
 
-  serial_puts(SERIAL_PORT, "ready for detect memory map\n");
+  printf("ready for detect memory map\n");
 
   unsigned long ebx = 0;
   void *dst = (void *)E820_MAP_ADDR;
-  u16_t *e820_cnt = E820_MAP_LEN;
+  uint16_t *e820_cnt = E820_MAP_LEN;
   *e820_cnt = 0;
   unsigned long cr0;
 
@@ -92,12 +108,12 @@ void __attribute__((section("entry"))) _start() {
     dst += 20;
 
     if (ebx == 0) {
-      serial_puts(SERIAL_PORT, "e820 success\n");
+      printf("e820 success\n");
       break;
     }
 
     if (code < 0) {
-      serial_puts(SERIAL_PORT, "e820 error\n");
+      printf("e820 error\n");
       while (1)
         ;
     }
@@ -107,14 +123,14 @@ void __attribute__((section("entry"))) _start() {
 
   // 开启 a20
   if (inb(0x92) & 2) {
-    serial_puts(SERIAL_PORT, "a20 is already enabled\n");
+    printf("a20 is already enabled\n");
   } else {
-    serial_puts(SERIAL_PORT, "a20 not enabled, go to enable it\n");
+    printf("a20 not enabled, go to enable it\n");
     outb_p(inb(0x92) | 2, 0x92);
   }
 
   // 加载 gdt
-  serial_puts(SERIAL_PORT, "go on load gdt\n");
+  printf("go on load gdt\n");
   asm volatile("lgdt %0" ::"m"(*&gdt_ptr) :);
 
   // 开启 cr0 保护位
@@ -122,7 +138,7 @@ void __attribute__((section("entry"))) _start() {
   cr0 |= 1;
   asm volatile("movl %0, %%cr0" ::"r"(cr0) :);
 
-  serial_puts(SERIAL_PORT, "ready to enter protected mode\n");
+  printf("ready to enter protected mode\n");
   // ljmp 进入保护模式
   asm volatile("ljmp %0, %1" ::"i"(BOOT_INIT_CS), "i"(&pm_start));
 }

@@ -1,3 +1,5 @@
+#ifndef _X86_PRINTF_H
+#define _X86_PRINTF_H
 #include <size.h>
 
 #define va_list __builtin_va_list
@@ -8,7 +10,7 @@
 
 #define x86_print_isdigit(c) (c >= '0' && c <= '9')
 
-size_t x86_print_strnlen(const char *s, size_t maxlen) {
+static size_t x86_print_strnlen(const char *s, size_t maxlen) {
   const char *es = s;
   while (*es && maxlen) {
     es++;
@@ -114,7 +116,7 @@ static char *x86_print_number(char *str, long num, int base, int size,
   return str;
 }
 
-int x86_print_vsprintf(char *buf, const char *fmt, va_list args) {
+static int x86_print_vsprintf(char *buf, const char *fmt, va_list args) {
   int len;
   unsigned long num;
   int i, base;
@@ -285,7 +287,7 @@ int x86_print_vsprintf(char *buf, const char *fmt, va_list args) {
   return str - buf;
 }
 
-int x86_print_sprintf(char *buf, const char *fmt, ...) {
+static int x86_print_sprintf(char *buf, const char *fmt, ...) {
   va_list args;
   int i;
 
@@ -294,3 +296,5 @@ int x86_print_sprintf(char *buf, const char *fmt, ...) {
   va_end(args);
   return i;
 }
+
+#endif

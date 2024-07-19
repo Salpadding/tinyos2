@@ -20,7 +20,8 @@
 #define BOOT_INIT_DS 0x10
 
 #define PAGE_SIZE 4096
-#define INIT_PAGETABLE ((void*)0x10000)
-#define INIT_PAGE_TABLE_ENTRYS (PAGE_SIZE / sizeof(u64_t))
+#define INIT_PAGETABLE (0x10000)
+#define INIT_PAGE_TABLE_ENTRYS (PAGE_SIZE / sizeof(uint64_t))
+
 
 #endif

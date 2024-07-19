@@ -6,7 +6,7 @@
 
 
 struct js;                 // JS engine (opaque)
-typedef u64_t jsval_t;  // JS value
+typedef uint64_t jsval_t;  // JS value
 
 struct js *js_create(void *buf, size_t len);         // Create JS instance
 jsval_t js_eval(struct js *, const char *, size_t);  // Execute JS code

@@ -1,7 +1,24 @@
 asm(".code32");
 #include <boot/link.h>
+#include <cpu.h>
 #include <serial/serial.h>
 #include <size.h>
+#include <x86/printf.h>
+#include <8259a.h>
+
+static int printf(const char *fmt, ...) {
+  char printf_buf[128];
+  va_list args;
+  int printed;
+
+  va_start(args, fmt);
+  printed = x86_print_vsprintf(printf_buf, fmt, args);
+  va_end(args);
+
+  serial_puts_n(SERIAL_DEFAULT_SERIAL_PORT, printf_buf, printed);
+
+  return printed;
+}
 
 extern int _text_end;
 
@@ -9,8 +26,8 @@ extern int _text_end;
 
 #define CPU_ID_FN 0x80000000
 
-static void _pm_start();
-static void setup_pae();
+void _pm_start();
+void setup_pae();
 
 static void memcpy(void *dst, void *src, unsigned long count) {
   asm volatile("cld\n\t"
@@ -25,68 +42,67 @@ static void memcpy(void *dst, void *src, unsigned long count) {
                "mov %%ax, %%gs\n\t"                                            \
                "mov %%ax, %%ss\n\t" ::"a"(seg))
 
-u64_t gdt_64[3] __attribute__((aligned(0x10))) = {
+uint64_t gdt_64[3] __attribute__((aligned(0x10))) = {
     [0] = 0,
     [1] = 0x0020980000000000,
     [2] = 0x0000920000000000,
 };
 
 typedef struct {
-  u16_t length;
-  u64_t addr;
+  uint16_t length;
+  uint64_t addr;
 } __attribute__((packed)) gdt_ptr_t;
 
-gdt_ptr_t gdt_64_ptr __attribute__((aligned(0x10))) = {
-    .length = sizeof(gdt_64) - 1, .addr = 0};
-
-static unsigned long cpuid(unsigned long eax, unsigned long *edx) {
-  asm volatile("cpuid\n\t"
-               "movl %%edx, %1\n\t"
-               : "=a"(eax), "=m"(*edx)
-               : "0"(eax)
-               :);
-  return eax;
-}
+gdt_ptr_t gdt_64_ptr
+    __attribute__((aligned(0x10))) = {.length = sizeof(gdt_64) - 1, .addr = 0};
 
 void pm_start() {
   RESET_SEG(BOOT_INIT_DS);
   _pm_start();
 }
 
-static void __attribute__((noinline)) _pm_start() {
-  gdt_64_ptr.addr = (u64_t)&gdt_64;
-  serial_puts(SERIAL_PORT, "we are now in protect mode\n");
+#define SPIN                                                                   \
+  while (1) {                                                                  \
+    asm volatile("nop\n\t");                                                   \
+  }
+
+#define TEST_CPU_FEATURE(x, y, z)                                              \
+  if (!(cpu_features & (x))) {                                                 \
+    printf(z);                                                                 \
+    SPIN;                                                                      \
+  }                                                                            \
+  printf(y);
+
+
+void __attribute__((noinline)) _pm_start() {
+  gdt_64_ptr.addr = (uint64_t)&gdt_64;
+  printf("we are now in protect mode\n");
 
   unsigned long i;
   char *src = (void *)LOADER_ENTRY;
   char *dst = (void *)0x200000;
 
-  unsigned long eax, edx;
-
-  eax = cpuid(CPU_ID_FN, &edx);
-
-  if (eax < CPU_ID_FN + 1) {
-    serial_puts(SERIAL_PORT, "long mode is not supported\n");
+  if (!cpuh_longmode()) {
+    printf("long mode is not supported\n");
     while (1)
       ;
   }
+  printf("detect long mode support, go on setup page table\n");
 
-  cpuid(CPU_ID_FN + 1, &edx);
-  if ((edx & (1 << 29)) == 0) {
-    serial_puts(SERIAL_PORT, "long mode is not supported\n");
-    while (1)
-      ;
-  }
+  unsigned long cpu_features = cpuh_features();
+  printf("cpu features = %x\n", cpuh_features);
 
-  serial_puts(SERIAL_PORT,
-              "detect long mode support, go on setup page table\n");
+  // try to enable sse and sse2
+  TEST_CPU_FEATURE(1 << 25, "SSE supported\n", "SSE not supported\n");
+  TEST_CPU_FEATURE(1 << 26, "SSE2 supported\n", "SSE2 not supported\n");
+
+  cpuh_enable_sse();
 
   memcpy((void *)KERNEL_ENTRY, (void *)KERNEL_TMP, KERNEL_SECS * SEC_SIZE);
   // 开启 pae
   setup_pae();
 
-  serial_puts(SERIAL_PORT,
-              "ready to jump to kernel code\n");
+  printf("ready to jump to kernel code\n");
 
   asm volatile(".globl enter_64\nenter_64:\n\t");
   // 准备跳到 0x100000 执行 64 位代码
@@ -96,24 +112,26 @@ static void __attribute__((noinline)) _pm_start() {
 }
 
 // identity mapping first 2MB
-static void setup_pae() {
-  unsigned long i;
+void setup_pae() {
+  uint64_t i;
 #define PAGE_TABLE_ENTRYS INIT_PAGE_TABLE_ENTRYS
-  u64_t *pud = INIT_PAGETABLE;
-  u64_t *pmd = pud + PAGE_TABLE_ENTRYS;
-  u64_t *pgd = pmd + PAGE_TABLE_ENTRYS;
-  u64_t *pt0 = pgd + PAGE_TABLE_ENTRYS;
-  u64_t *pt1 = pt0 + PAGE_TABLE_ENTRYS;
+  uint64_t *pud = (void *)INIT_PAGETABLE;
+  uint64_t *pmd = (void *)(INIT_PAGETABLE + PAGE_SIZE);
+  uint64_t *pgd = (void *)(INIT_PAGETABLE + PAGE_SIZE * 2);
+  uint64_t *pt0 = (void *)(INIT_PAGETABLE + PAGE_SIZE * 3);
+  uint64_t *pt1 = (void *)(INIT_PAGETABLE + PAGE_SIZE * 4);
 
   // clear all
-  for (i = 0; i < PAGE_TABLE_ENTRYS * 4; i++) {
+  for (i = 0; i < PAGE_TABLE_ENTRYS * 8; i++) {
     pud[i] = 0;
   }
-  pud[0] = (unsigned long)pmd | 7;
+
+  asm volatile(".globl fill_init_page_table\n fill_init_page_table:\n\t");
+  pud[0] = ((uint64_t)pmd) | 7;
   pud[256] = pud[0];
-  pmd[0] = (unsigned long)pgd | 7;
-  pgd[0] = (unsigned long)pt0 | 7;
-  pgd[1] = (unsigned long)pt1 | 7;
+  pmd[0] = ((uint64_t)pgd) | 7;
+  pgd[0] = ((uint64_t)pt0) | 7;
+  pgd[1] = ((uint64_t)pt1) | 7;
 
   for (i = 0; i < PAGE_TABLE_ENTRYS * 2; i++) {
     pt0[i] = (i << 12) | 7;

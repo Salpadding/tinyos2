@@ -1,7 +1,7 @@
-CFLAGS := -mcmodel=large -I../include -I. -fno-builtin -fno-stack-protector -m64 -Og -g -fomit-frame-pointer -ffreestanding -nostdinc  -Wall
+CFLAGS := -mcmodel=large -I../include -I. -fno-builtin -fno-stack-protector -m64 -O0 -g \
+		-fomit-frame-pointer -ffreestanding -nostdinc  -Wall
 
 ASFLAGS := --64
-
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -17,8 +17,13 @@ ASFLAGS := --64
 kernel.bin: system
 	$(OBJCOPY) -I elf64-x86-64 -S -R ".eh_frame" -R ".comment" -O binary system kernel.bin
 
-system: init.o js/engine.o
-	$(LD)  -T kernel.lds  -Bsymbolic -b elf64-x86-64 -nostdlib -static -o system $^
+
+script/init.js.c: script/init.js
+	xxd -i $^ $@
+
+system: init.o js/engine.o ctype.o atoi.o script/init.js.o gdt.o stack.o
+	$(LD) -T kernel.lds  -Bsymbolic -b elf64-x86-64 -nostdlib -static -o system $^
+	$(NM) system > system.map
 
 qemu: kernel.bin
 	dd if=kernel.bin of=disk.img bs=512 seek=33 conv=notrunc
@@ -27,3 +32,11 @@ qemu: kernel.bin
 bochs: kernel.bin
 	dd if=kernel.bin of=../build/disk.img bs=512 seek=33 conv=notrunc
 	bochs -f ../bochs.txt
+
+clean:
+	@rm system system.map
+	@find . -type f -name '*.o' | xargs rm
+	@find . -type f -name '*.s' | xargs rm
+	@find . -type f -name '*.img' | xargs rm
+	@find . -type f -name '*.bin' | xargs rm
+	@rm script/*.c

@@ -67,6 +67,4 @@ static void *memmove(void *dest, const void *src, size_t n) {
   return dest;
 }
 
-static double strtod(const char *nptr, char **endptr) { return 0; }
-
 #endif

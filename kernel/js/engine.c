@@ -1,3 +1,4 @@
+#include <atoi.h>
 #include <kernel/js/engine.h>
 #include <size.h>
 #include <string.h>
@@ -10,7 +11,7 @@
 
 #ifdef DEBUG_JS_ENGINE
 static int printf(const char *fmt, ...) {
-  char printf_buf[1024];
+  char printf_buf[128];
   va_list args;
   int printed;
 
@@ -23,10 +24,14 @@ static int printf(const char *fmt, ...) {
   return printed;
 }
 
+static double strtod(const char *buf, char **endptr) {
+  int64_t ret = strtol(buf, endptr, 0);
+  return (double)ret;
+}
+
 static int vsnprintf(char *buf, int n, const char *fmt, va_list args) {
   return x86_print_vsprintf(buf, fmt, args);
 }
-
 
 static int snprintf(char *buf, int n, const char *fmt, ...) {
   va_list args;
@@ -59,8 +64,7 @@ static int printf(const char *fmt, ...) {}
 #endif
 
 typedef unsigned char uint8_t;
-typedef u32_t jsoff_t;
-typedef u64_t uint64_t;
+typedef uint32_t jsoff_t;
 typedef int bool;
 #define true 1
 #define false 0
@@ -74,15 +78,13 @@ typedef int bool;
 #endif
 
 #define assert(x)
-#define modf(x,y) 0
-
-typedef u32_t jsoff_t;
+#define modf(x, y) 0
 
 struct js {
   jsoff_t css;       // Max observed C stack size
   jsoff_t lwm;       // JS RAM low watermark: min free RAM observed
   const char *code;  // Currently parsed code snippet
-  char errmsg[256];   // Error message placeholder
+  char errmsg[256];  // Error message placeholder
   uint8_t tok;       // Last parsed token value
   uint8_t consumed;  // Indicator that last parsed token was consumed
   uint8_t flags;     // Execution flags, see F_* constants below
@@ -259,8 +261,7 @@ static size_t strobj(struct js *js, jsval_t obj, char *buf, size_t len) {
 // Stringify numeric JS value
 static size_t strnum(jsval_t value, char *buf, size_t len) {
   double dv = tod(value), iv;
-  const char *fmt = modf(dv, &iv) == 0.0 ? "%.17g" : "%g";
-  return (size_t)snprintf(buf, len, fmt, dv);
+  return (size_t)snprintf(buf, len, "%ld", (int64_t)dv);
 }
 
 // Return mem offset and length of the JS string
@@ -301,6 +302,7 @@ jsval_t js_mkerr(struct js *js, const char *xx, ...) {
 
 // Stringify JS value into the given buffer
 static size_t tostr(struct js *js, jsval_t value, char *buf, size_t len) {
+  printf("to str vtype = %d\n", vtype(value));
   switch (vtype(value)) { // clang-format off
     case T_UNDEF: return cpy(buf, len, "undefined", 9);
     case T_NULL:  return cpy(buf, len, "null", 4);
@@ -323,8 +325,9 @@ const char *js_str(struct js *js, jsval_t value) {
   size_t len, available = js->size - js->brk - sizeof(jsoff_t);
   if (is_err(value))
     return js->errmsg;
-  if (js->brk + sizeof(jsoff_t) >= js->size)
+  if (js->brk + sizeof(jsoff_t) >= js->size) {
     return "";
+  }
   len = tostr(js, value, buf, available);
   js_mkstr(js, NULL, len);
   return buf;
@@ -1539,7 +1542,7 @@ bool js_chkargs(jsval_t *args, int nargs, const char *spec) {
 }
 
 jsval_t js_eval(struct js *js, const char *buf, size_t len) {
-  printf("EVAL: [%.*s]\n", (int) len, buf);
+  printf("EVAL: [%.*s]\n", (int)len, buf);
   jsval_t res = js_mkundef();
   if (len == (size_t)~0U)
     len = strlen(buf);
