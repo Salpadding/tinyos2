@@ -28,7 +28,9 @@ mbr.o: mbr.c
 mbr.bin: mbr.o mbr.lds
 	$(LD) -o mbr.elf -T mbr.lds mbr.o
 	$(NM) mbr.elf > mbr.map
-	$(OBJCOPY) -O binary mbr.elf $@
+	$(MAKE) -C ../tools/link
+	touch mbr.bin
+	../tools/link/link options/mbr.json
 	dd if=mbr.bin of=../build/disk.img conv=notrunc bs=512 count=1
 
 mbr.qemu: mbr.bin
@@ -59,7 +61,7 @@ loader.bin: loader.o pm.o 8259a.o loader32.o loader.lds
 	$(NM) loader.elf > loader.map
 	$(MAKE) -C ../tools/link
 	touch $@
-	../tools/link/link options.json
+	../tools/link/link options/loader.json
 	dd if=loader.bin of=../build/disk.img seek=$(LOADER_FIRST_LBA) conv=notrunc bs=512 count=$(LOADER_SECTORS)
 
 loader.qemu: loader.bin mbr.bin
