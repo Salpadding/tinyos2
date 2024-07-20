@@ -1,14 +1,16 @@
 ENTRY(_start)
+
+
 SECTIONS
 {
- . = 0x1000,
+ . = HEADER_ENTRY,
  .header : {
     *(header.entry);
     *(header.entry32);
     *(header.text);
     *(header.data);
  }
- . = . + 0x10000,
+ . = . + PM_ENTRY,
  .text : {
   *(.text);
   _etext = . ;
@@ -18,6 +20,6 @@ SECTIONS
    *(.rodata*);
  }
  .bss : {
- *(.bss);
+	*(.bss);
  }
 }

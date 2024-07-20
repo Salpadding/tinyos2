@@ -1,6 +1,14 @@
 #ifndef _SERIAL_SERIAL_H
 #define _SERIAL_SERIAL_H
 
+#ifdef SECTION_NAME
+#define ATTRIBUTES __attribute__((section(SECTION_NAME)))
+#endif
+
+#ifndef ATTRIBUTES
+#define ATTRIBUTES
+#endif
+
 #define SERIAL_DEFAULT_SERIAL_PORT 0x3f8
 
 #include <asm/io.h>
@@ -13,7 +21,8 @@
   outb_p(0x0b, SERIAL_PORT + 4);                                               \
   outb_p(0x0d, SERIAL_PORT + 1);
 
-static void __attribute__((noinline)) serial_putc(int port, char c) {
+ATTRIBUTES
+static void serial_putc(int port, char c) {
   unsigned int ax = 0;
 
   while (!(ax & 0xff)) {
@@ -22,12 +31,14 @@ static void __attribute__((noinline)) serial_putc(int port, char c) {
   outb_p(c, port);
 }
 
+ATTRIBUTES
 static void serial_puts(int port, const char *s) {
   while (*s) {
     serial_putc(port, *(s++));
   }
 }
 
+ATTRIBUTES
 static void serial_puts_n(int port, const char *s, int n) {
   while (*s && n) {
     serial_putc(port, *(s++));

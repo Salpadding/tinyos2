@@ -1,9 +1,11 @@
 OUTPUT_FORMAT("elf32-i386")
 ENTRY(_start)
+
 MEMORY
 {
     MBR(wx): ORIGIN = 0x7c00, LENGTH = 512
 }
+
 SECTIONS
 {
  .text :
@@ -11,6 +13,7 @@ SECTIONS
   *(entry);
   *(.text);
  } > MBR
+
  .data : {
   *(.rodata*);
   *(.data);

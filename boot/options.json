@@ -1,0 +1,18 @@
+{
+    "input": "loader.elf",
+    "output": "loader.bin",
+    "sections": [
+        {
+           "name": ".header",
+           "offset": "0"
+        },
+        {
+            "name": ".text",
+            "offset": "%-0x10000"
+        },
+        {
+            "name": ".data",
+            "offset": "%-0x10000"
+        }
+    ]
+}
